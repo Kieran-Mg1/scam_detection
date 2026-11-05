@@ -1,8 +1,8 @@
 import pandas as pd
+from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.preprocessing import StandardScaler
-
-
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.impute import SimpleImputer
 
 def data_preprocesser(data):
     '''
@@ -28,22 +28,29 @@ def data_preprocesser(data):
     return train_x, train_y, val_x, val_y, test_x, test_y
 
 
-
 def format_col_types(data):
-    onehotcols = ['persona', 'country_type', 'remittance_category', 'day_of_week' , 'is_weekend', 'is_new_beneficiary', 'beneficiary_country', 'account_id']
+    onehotcols = ['country_type', 'day_of_week' , 'is_weekend', 'is_new_beneficiary', 'beneficiary_country']
+    drop_cols = ['sender_iban','beneficiary_iban', 'account_id', 'remittance_text', 'persona', 'remittance_category'] #persona, remittance_category imo could be a class label
+    # convert time to linux time
+    data["timestamp"] = pd.to_datetime(data["timestamp"]).astype("int64") / 1e9
+    # convert time to onehot
     data = pd.get_dummies(data, columns=onehotcols, dtype=int)
+    # does not have to be inplace, but I prefer over constant reassignment
+    data.drop(columns=drop_cols, inplace=True)
 
     return data
 
 
-
 def data_split(df):
+    #split trainval 80 / test 20
     splits_train_test = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=1)
 
+    # get indices
     train_idx, test_idx = next(splits_train_test.split(df, df["is_fraud"]))
     trainval_df = df.iloc[train_idx]
     test_df = df.iloc[test_idx]
 
+    #split train 60 / val 20
     splits_train_val = StratifiedShuffleSplit(n_splits=1, test_size=0.25, random_state=1)
 
     train_idx, val_idx = next(splits_train_val.split(trainval_df, trainval_df["is_fraud"]))
@@ -68,22 +75,17 @@ def xy_select(train_df, val_df, test_df):
     
     return train_x, train_y, val_x, val_y, test_x, test_y
 
-def standardise_cols(train_df, val_df, test_df):
 
-    drop_cols = ['sender_iban','beneficiary_iban']
+def standardise_cols(train_df, val_df, test_df):
     float_cols = train_df.select_dtypes("float").columns
 
-    scaler = StandardScaler()
-    train_df[float_cols] = scaler.fit_transform(train_df[float_cols])
-    val_df[float_cols] = scaler.transform(val_df[float_cols])
-    test_df[float_cols] = scaler.transform(test_df[float_cols])
+    transforms = Pipeline([
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", MinMaxScaler()) # won't matter for a tree, but should improve gradient stability in logreg, nn, ..
+    ])
 
-    # point in time correctness vs leakage is getting hairy, leaving for now
-    # df["sender_previous_transfers"] = df.sort_values("timestamp").groupby("sender_iban").cumcount()
-    # df["beneficiary_previous_transfers"] = df.sort_values("timestamp").groupby("beneficiary_iban").cumcount()
-    
-    train_df.drop(columns=drop_cols, inplace=True)
-    val_df.drop(columns=drop_cols, inplace=True)
-    test_df.drop(columns=drop_cols, inplace=True)
+    train_df[float_cols] = transforms.fit_transform(train_df[float_cols])
+    val_df[float_cols] = transforms.transform(val_df[float_cols])
+    test_df[float_cols] = transforms.transform(test_df[float_cols])
 
     return train_df, val_df, test_df
