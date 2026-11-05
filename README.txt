@@ -57,7 +57,7 @@ C(t)=
 $$
 This is an oversimplification of what business costs may be. Repeatedly blocking small legitimate transfers may cause customers to become frustrated and leave the platform for example, and does not account for regulatory restrictions. I wanted to try and tie the optimisation to something outside of label frequency. Ideally you could compare $\arg\max_t F_1(t)$ and $\arg\min_t C(t)$. In practice, this can be realised as generating a confusion matrix for each threshold in a grid search to find the F1 score, and then additionally use a transaction amount field to find $C(t)$. 
 
-The rest of the ML pipeline should follow standard ML task practices. 
+The rest of the ML pipeline should follow standard ML task practices. Dataset used was https://huggingface.co/datasets/EpiphanyTech/SynSEPA. Please note this whole project was done in one and a half days and as such is not particularly tidy.
 
 ## Other Considerations
 
@@ -69,7 +69,6 @@ Generating any historical features after splitting is problematic too. For examp
 It seems a similar issue to these was encountered in https://wise.jobs/when-money-has-no-borders-your-data-cant-either. 
 ### SMOTE
 Synthetic Minority Oversampling Technique (SMOTE) may alleviate the need to perform an optimisation over boundaries, but I'd need more time to consider if this introduces any bias. To me in theory SMOTE just moves the decision boundary back towards $\gtrless 0.5$. 
-
 
 ## Results
 
