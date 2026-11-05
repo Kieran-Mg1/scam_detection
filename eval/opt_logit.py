@@ -5,25 +5,44 @@ import pandas as pd
 OUTPUT_DIR = Path("results/opt_boundary")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-
-def opt_boundary(model, val_x, val_y, search_range=(0.01, 1.0, 1000)):
-
-    f1_scores = []
-    C_scores = []
-
+def opt_boundary(model, val_x, val_y, search_range=(0.01, 1.0, 1000), mode='C'):
+    scores = []
     boundaries = np.linspace(*search_range)
-    probabilites = model.predict_proba(val_x)[:, 1]
-    print('prob range:', pd.Series(model.predict_proba(val_x)[:, 1]).value_counts().iloc[:5])
-    
-    for boundary in boundaries:
-        
-        class_pred = (probabilites >= boundary).astype(int)
-        f1 = f1_score(val_y, class_pred, zero_division=0)
-        C_score = ... #todo
+    probabilities = model.predict_proba(val_x)[:, 1]
+    y = np.asarray(val_y)
+    amounts = pd.read_csv("val_amount.csv")["amount"].to_numpy()
 
-        f1_scores.append(f1) 
+    if mode == 'f1':
+        for boundary in boundaries:
+            class_pred = (probabilities >= boundary).astype(int)
+            scores.append(f1_score(y, class_pred, zero_division=0))
 
-    best_boundary_f1 = boundaries[np.argmax(f1_scores)]
-    print('best boundary:', best_boundary_f1, f1_scores[np.argmax(f1_scores)])
-    pd.DataFrame([best_boundary_f1]).to_csv(OUTPUT_DIR / "best_boundary_f1.csv", index=False)
-    return best_boundary_f1
+        best_idx = np.argmax(scores)
+
+    elif mode == 'C':
+        for boundary in boundaries:
+            class_pred = (probabilities >= boundary).astype(int)
+            fn = (y == 1) & (class_pred == 0)
+            fp = (y == 0) & (class_pred == 1)
+            scores.append(amounts[fn].sum() + amounts[fp].sum())
+
+        best_idx = np.argmin(scores)
+
+    else:
+        raise ValueError("mode must be 'f1' or 'C'")
+
+    best_boundary = boundaries[best_idx]
+    best_pred = (probabilities >= best_boundary).astype(int)
+
+    fn = (y == 1) & (best_pred == 0)
+    fp = (y == 0) & (best_pred == 1)
+    cost = amounts[fn].sum() + amounts[fp].sum()
+    f1 = f1_score(y, best_pred, zero_division=0)
+
+    print(f"Best {mode} boundary: {best_boundary:.4f}, F1: {f1:.4f}, Cost: {cost:.2f}")
+
+    pd.DataFrame([{"boundary": best_boundary, "f1": f1, "cost": cost}]).to_csv(
+        OUTPUT_DIR / f"best_boundary_{mode}.csv", index=False
+    )
+
+    return best_boundary

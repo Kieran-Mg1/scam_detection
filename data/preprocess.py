@@ -83,6 +83,7 @@ def standardise_cols(train_df, val_df, test_df):
         ("imputer", SimpleImputer(strategy="median")),
         ("scaler", MinMaxScaler()) # won't matter for a tree, but should improve gradient stability in logreg, nn, ..
     ])
+    pd.DataFrame(val_df['amount']).to_csv('val_amount.csv', index=False) # need for boundary op
 
     train_df[float_cols] = transforms.fit_transform(train_df[float_cols])
     val_df[float_cols] = transforms.transform(val_df[float_cols])
