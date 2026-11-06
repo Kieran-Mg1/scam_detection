@@ -36,10 +36,7 @@ $$
 
 and
 
-$$ \boxed{ \frac{1}{N}\sum_{i=1}^{N}\hat{p}_i =
-\frac{N_{\text{scams}}}{N_{\text{total}}}
-}
-$$
+$$\boxed{ \frac{1}{N}\sum_{i=1}^{N}\hat{p}_i = \frac{N_{\text{scams}}}{N_{\text{total}}}}$$
 
 Thus, logistic regression learns the empirical scam base rate i.e. the mean predicted scam probability equals the observed scam prevalence. Assuming features weakly separate classes, using conventional BCE prediction thresholds of $\gtrless 0.5$ will mean on average, scam recall is poor, since $N_{\text{total}} \gg N_{\text{scams}}$.
 
@@ -53,8 +50,7 @@ You could choose a threshold from a grid search, and select the threshold with t
 - $c_{\mathrm{FN}}(A_i)$: False negative transaction amount $A_i$ (allowed scam transfer).
 - $c_{\mathrm{FP}}(A_i)$: False positive transaction amount $A_i$ (blocked legitimate transfer).
 
-$$
-\boxed{
+$$ \boxed{
 \begin{aligned}
 C(t)=&
 \underbrace{
@@ -65,8 +61,8 @@ C(t)=&
 \sum_{i=1}^{N}(1-y_i)\hat y_i(t)c_{\mathrm{FP}}(A_i)
 }_{\text{Cost of blocking legitimate transfers}}
 \end{aligned}
-}
-$$
+}$$
+
 This is an oversimplification of what business costs may be. Repeatedly blocking small legitimate transfers may cause customers to become frustrated and leave the platform for example, and does not account for regulatory restrictions. Alternatively, there may be specifc constraints such as a minimum recall and maximum false positive rate. I went for this constraint in the end over the cost function.
 
 The rest of the ML pipeline should follow standard ML task practices. Dataset used was https://huggingface.co/datasets/EpiphanyTech/SynSEPA. Please note this whole project was done in one and a half days and as such is not particularly tidy.
