@@ -10,11 +10,9 @@ df = pd.read_csv("synsep_full_dataset.csv")
 
 train_x, train_y, val_x, val_y, test_x, test_y = data_preprocesser(df)
 
-#tree currently returns the same values for the boundary for f1 or C
-# model = run_tree(train_x, train_y, val_x, val_y) 
-model = run_logreg(train_x, train_y, val_x, val_y)
+model = run_tree(train_x, train_y, val_x, val_y) 
 
-boundary = opt_boundary(model, val_x, val_y, mode='C')
+boundary = opt_boundary(model, val_x, val_y, mode='constraints', min_recall=0.85, max_fpr=0.01)
 
 test_model(model, test_x, test_y, boundary)
 

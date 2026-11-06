@@ -55,25 +55,24 @@ C(t)=
 }_{\text{Cost of blocking legitimate transfers}}
 }
 $$
-This is an oversimplification of what business costs may be. Repeatedly blocking small legitimate transfers may cause customers to become frustrated and leave the platform for example, and does not account for regulatory restrictions. I wanted to try and tie the optimisation to something outside of label frequency. Ideally you could compare $\arg\max_t F_1(t)$ and $\arg\min_t C(t)$. In practice, this can be realised as generating a confusion matrix for each threshold in a grid search to find the F1 score, and then additionally use a transaction amount field to find $C(t)$. 
+This is an oversimplification of what business costs may be. Repeatedly blocking small legitimate transfers may cause customers to become frustrated and leave the platform for example, and does not account for regulatory restrictions. Alternatively, there may be specifc constraints such as a minimum recall and maximum false positive rate. I went for this constraint in the end over the cost function.
 
 The rest of the ML pipeline should follow standard ML task practices. Dataset used was https://huggingface.co/datasets/EpiphanyTech/SynSEPA. Please note this whole project was done in one and a half days and as such is not particularly tidy.
 
-## Other Considerations
-
-### Splitting
-An issue I found in testing was leakage when doing a stratified split for a dataset of transactions (https://huggingface.co/datasets/EpiphanyTech/SynSEPA). With a random stratified split, transactions are assigned to training and test sets regardless of when they occurred. As a result, the model may be trained on later transactions and evaluated on earlier ones, potentially giving an overly optimistic estimate of future performance.
-
-Generating any historical features after splitting is problematic too. For example, if you generate a feature derived from point-in-time values across the whole dataframe, such as a cumulative sum for sender and beneficiary previous transfers, you will leak information across a subsequent stratified splits. If you generate the feature per split, then an account with a total value of 4 prior transactions in the train set will have this value reset to at least zero in the test set, which is incorrect. 
-
-It seems a similar issue to these was encountered in https://wise.jobs/when-money-has-no-borders-your-data-cant-either. 
-### SMOTE
-Synthetic Minority Oversampling Technique (SMOTE) may alleviate the need to perform an optimisation over boundaries, but I'd need more time to consider if this introduces any bias. To me in theory SMOTE just moves the decision boundary back towards $\gtrless 0.5$. 
-
 ## Results
 
-The cost-optimal threshold reduces cost on the validation set by £4,094.55 (approximately 0.09%) under current settings with logistic regression.
+Utilised a Random Forest classifier using a chronological 60/20/20 train, validation and test split, with time-series cross-validation on the training set. Rather than optimising F1 or transaction-weighted cost, I selected a decision threshold on the validation set subject to two business constraints:
+- **Minimum recall:** 85% of scams must be detected.
+- **Maximum false positive rate:** No more than 1% of legitimate transactions may be incorrectly flagged.
 
-- F1 optimisation favours a lower threshold, catching more scams but incorrectly flagging more legitimate transactions.
-- Cost optimisation favours a higher threshold, reducing false positives but missing more scams.
-- The test F1 scores are close in either case. 
+The logit threshold which optimsied this was then applied to the out-of-time test set without further optimisation. The model returned good train and validation performance, but generalised poorly on the test set. Observing the Gini impurity of the Random Forest splits showed the model relied heavily on beneficiary country. After some investigating, I found this was due to distribution shift over time between the train and test sets. Six beneficiary countries (IT, BE, DE, ES, FR and NL) had no scams in the training or validation sets, but collectively contained 1,516 scams in the test set. This results in the model using a feature for predictions on the train set that doesn't generalise to the test set. Removing these features collapsed model performance, so all that was left was to try and regularise the model. Since this is my own made up example, I'm not sure how achievable the business constraints are, so have not pursued a full parameter sweep to this end. Overall this demonstrates the limitations of such models. The dataset itself mentioned about using transformers, so perhaps they overcome this issue.
+
+## Other considerations
+
+### Splitting
+An issue I considered was leakage when doing a stratified split for a dataset of transactions (https://huggingface.co/datasets/EpiphanyTech/SynSEPA). With a random stratified split, transactions are assigned to training and test sets regardless of when they occurred. As a result, the model may be trained on later transactions and evaluated on earlier ones, potentially giving an overly optimistic estimate of future performance. This is mentioned in https://wise.jobs/when-money-has-no-borders-your-data-cant-either. 
+
+### SMOTE
+Synthetic Minority Oversampling Technique (SMOTE) may alleviate the need to perform an optimisation over boundaries, but I'd need more time to consider if this introduces any bias. To me in theory SMOTE just moves the decision boundary back towards $\gtrless 0.5$. I also think using the distributional change information that occured in the test set to generate synthetic examples for training is cheating, so did not perform this.  
+
+

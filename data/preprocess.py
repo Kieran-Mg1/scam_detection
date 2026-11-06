@@ -29,6 +29,8 @@ def data_preprocesser(data):
 
 
 def format_col_types(data):
+    # 'beneficiary_country', 'country_type' have a distributional shift from train -> test, causing overfitting 
+     # removing them collpases performance
     onehotcols = ['country_type', 'day_of_week' , 'is_weekend', 'is_new_beneficiary', 'beneficiary_country']
     drop_cols = ['sender_iban','beneficiary_iban', 'account_id', 'remittance_text', 'persona', 'remittance_category'] #persona, remittance_category imo could be a class label
     # convert time to linux time
@@ -41,24 +43,38 @@ def format_col_types(data):
     return data
 
 
-def data_split(df):
-    #split trainval 80 / test 20
-    splits_train_test = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=1)
+# def data_split(df):
+#     #split trainval 80 / test 20
+#     splits_train_test = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=1)
 
-    # get indices
-    train_idx, test_idx = next(splits_train_test.split(df, df["is_fraud"]))
-    trainval_df = df.iloc[train_idx]
-    test_df = df.iloc[test_idx]
+#     # get indices
+#     train_idx, test_idx = next(splits_train_test.split(df, df["is_fraud"]))
+#     trainval_df = df.iloc[train_idx]
+#     test_df = df.iloc[test_idx]
 
-    #split train 60 / val 20
-    splits_train_val = StratifiedShuffleSplit(n_splits=1, test_size=0.25, random_state=1)
+#     #split train 60 / val 20
+#     splits_train_val = StratifiedShuffleSplit(n_splits=1, test_size=0.25, random_state=1)
 
-    train_idx, val_idx = next(splits_train_val.split(trainval_df, trainval_df["is_fraud"]))
-    val_df = trainval_df.iloc[val_idx]
-    train_df = trainval_df.iloc[train_idx]
+#     train_idx, val_idx = next(splits_train_val.split(trainval_df, trainval_df["is_fraud"]))
+#     val_df = trainval_df.iloc[val_idx]
+#     train_df = trainval_df.iloc[train_idx]
 
     
+#     return train_df, val_df, test_df
+
+def data_split(df):
+    # Split chronologically
+    df = df.sort_values("timestamp").reset_index(drop=True)
+
+    train_end = int(len(df) * 0.6)
+    val_end = int(len(df) * 0.8)
+
+    train_df = df.iloc[:train_end].copy()
+    val_df = df.iloc[train_end:val_end].copy()
+    test_df = df.iloc[val_end:].copy()
+
     return train_df, val_df, test_df
+
 
 def xy_select(train_df, val_df, test_df):
     target = 'is_fraud'
@@ -72,6 +88,10 @@ def xy_select(train_df, val_df, test_df):
 
     train_y = train_df[target]
     train_x = train_df.drop(columns=drop_cols)
+
+    print("Percent scam train:",(train_y.sum()/len(train_y))*100)
+    print("Percent scam val:",(val_y.sum()/len(val_y))*100)
+    print("Percent scam test:",(test_y.sum()/len(test_y))*100)
     
     return train_x, train_y, val_x, val_y, test_x, test_y
 

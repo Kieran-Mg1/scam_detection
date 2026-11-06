@@ -2,9 +2,9 @@ from pathlib import Path
 import joblib
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import log_loss, f1_score, precision_score, recall_score, confusion_matrix, ConfusionMatrixDisplay
-from sklearn.model_selection import StratifiedKFold, cross_validate
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import log_loss, f1_score, precision_score, recall_score, confusion_matrix, ConfusionMatrixDisplay, roc_auc_score, average_precision_score
+from sklearn.model_selection import TimeSeriesSplit, cross_validate
 from sklearn.utils import resample
 import numpy as np
 
@@ -13,12 +13,14 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def train_model(train_x, train_y):
-    # unrestrained max depth makes the problem too easy. In most cases you'll have to limit the depth, so I do that here
-    model = DecisionTreeClassifier(random_state=1, max_depth=10) 
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1)
+    model = RandomForestClassifier(random_state=1, max_depth=5, n_estimators=10, min_samples_leaf=50,)
+    cv = TimeSeriesSplit(n_splits=5)
 
-    scores = cross_validate(model, train_x, train_y, cv=cv, scoring=["f1", "precision", "recall"])
-    print(pd.DataFrame(scores).mean()) #should be close to val score
+    scores = cross_validate(
+        model, train_x, train_y, cv=cv,
+        scoring=["f1", "precision", "recall"]
+    )
+    print(pd.DataFrame(scores).mean())
 
     model.fit(train_x, train_y)
     return model
@@ -27,32 +29,50 @@ def train_model(train_x, train_y):
 def evaluate_model(model, val_x, val_y):
     predictions = model.predict(val_x)
     probabilities = model.predict_proba(val_x)
-    
+    y = np.asarray(val_y)
+
     metrics = {
-        "precision": precision_score(val_y, predictions, zero_division=0),
-        "recall": recall_score(val_y, predictions, zero_division=0),
-        "f1": f1_score(val_y, predictions, zero_division=0),
-        "log_loss": log_loss(val_y, probabilities)
+        "precision": precision_score(y, predictions, zero_division=0),  # Of transactions flagged as scams, proportion actually scams
+        "recall": recall_score(y, predictions, zero_division=0),  # Of all actual scams, proportion correctly detected
+        "f1": f1_score(y, predictions, zero_division=0),  # Harmonic mean of precision and recall
+        "log_loss": log_loss(y, probabilities),  # Penalises incorrect predicted probabilities; lower is better
+        "roc_auc": roc_auc_score(y, probabilities[:, 1]),  # Measures how well scams are ranked above legitimate transactions
+        "average_precision": average_precision_score(y, probabilities[:, 1])  # Summarises precision-recall performance across thresholds
     }
-    bootstrap_scores = []
 
-    for i in range(10):
-        np_val_y = np.asarray(val_y)
-        idx = resample(np.arange(len(np_val_y)), replace=True, stratify=np_val_y, random_state=i)
-        bootstrap_scores.append(f1_score(np_val_y[idx], predictions[idx], zero_division=0))
+    # Bootstrap 95% confidence interval for F1
+    # bootstrap_scores = []
+    # for i in range(1000):
+    #     idx = resample(np.arange(len(y)), replace=True, stratify=y, random_state=i)
+    #     bootstrap_scores.append(f1_score(y[idx], predictions[idx], zero_division=0))
 
-    metrics["f1_ci_lower"], metrics["f1_ci_upper"] = np.percentile(bootstrap_scores, [2.5, 97.5]) # 95% confidence interval
-    print(f"f1_ci_lower = {metrics['f1_ci_lower']:.3f}, f1_ci_upper = {metrics['f1_ci_upper']:.3f}")
-    
+    # metrics["f1_ci_lower"], metrics["f1_ci_upper"] = np.percentile(bootstrap_scores, [2.5, 97.5])
+
     pd.DataFrame([metrics]).to_csv(OUTPUT_DIR / "validation_metrics.csv", index=False)
 
-    cm = confusion_matrix(val_y, predictions, labels=[0, 1])
-    pd.DataFrame(cm, index=["Actual legitimate", "Actual scam"], columns=["Predicted legitimate", "Predicted scam"]).to_csv(OUTPUT_DIR / "confusion_matrix.csv")
+    # Save feature importances or logistic regression coefficients
+    if hasattr(model, "feature_importances_"):
+        importance = model.feature_importances_
+    elif hasattr(model, "coef_"):
+        importance = model.coef_[0]
+    else:
+        raise ValueError("Model does not expose feature importances or coefficients")
 
-    ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Legitimate", "Scam"]).plot()
-    plt.savefig(OUTPUT_DIR / "confusion_matrix.png")
-    plt.close()
+    pd.DataFrame({
+        "feature": val_x.columns,
+        "importance": importance
+    }).sort_values("importance", ascending=False).to_csv(
+        OUTPUT_DIR / "feature_importance.csv", index=False
+    )
 
+    # Save confusion matrix
+    cm = confusion_matrix(y, predictions, labels=[0, 1])
+    pd.DataFrame(cm, index=["Actual legitimate", "Actual scam"],
+                 columns=["Predicted legitimate", "Predicted scam"]).to_csv(
+        OUTPUT_DIR / "confusion_matrix.csv"
+    )
+
+    print(metrics)
     return metrics
 
 

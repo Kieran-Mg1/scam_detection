@@ -6,7 +6,7 @@ import numpy as np
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss, f1_score, precision_score, recall_score, confusion_matrix, ConfusionMatrixDisplay
-from sklearn.model_selection import StratifiedKFold, cross_validate
+from sklearn.model_selection import TimeSeriesSplit, cross_validate
 from sklearn.utils import resample
 
 OUTPUT_DIR = Path("results/validation/logistic_regression")
@@ -15,9 +15,12 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 def train_model(train_x, train_y):
     model = LogisticRegression(max_iter=1000, random_state=1)
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1)
+    cv = TimeSeriesSplit(n_splits=5)
 
-    scores = cross_validate(model, train_x, train_y, cv=cv, scoring=["f1", "precision", "recall"])
+    scores = cross_validate(
+        model, train_x, train_y, cv=cv,
+        scoring=["f1", "precision", "recall"]
+    )
     print(pd.DataFrame(scores).mean())
 
     model.fit(train_x, train_y)
